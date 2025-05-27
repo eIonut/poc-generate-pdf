@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Generator</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>PDF Generator & Manager</h1>
+
+      <% if (message) { %>
+      <div class="message <%= message.type %>"><%= message.text %></div>
+      <% } %>
+
+      <h2>Generate New PDF</h2>
+      <form action="/generate-pdf" method="POST">
+        <label for="title">Document Title:</label>
+        <input
+          type="text"
+          id="title"
+          name="title"
+          value="My Awesome Report"
+          required
+        />
+
+        <label for="content">Main Content (Paragraph):</label>
+        <textarea id="content" name="content" rows="3">
+This is the main content of the PDF. It can span multiple lines and will be formatted as a paragraph.</textarea
+        >
+
+        <label for="qrData">QR Code Data:</label>
+        <input
+          type="text"
+          id="qrData"
+          name="qrData"
+          value="https://example.com"
+          required
+        />
+
+        <button type="submit">Generate PDF</button>
+      </form>
+
+      <h2>Generated PDFs</h2>
+      <% if (pdfs.length > 0) { %>
+      <ul>
+        <% pdfs.forEach(pdf => { %>
+        <li>
+          <span
+            ><%= pdf.filename %> (Created: <%= new
+            Date(pdf.createdAt).toLocaleString() %>)</span
+          >
+          <a href="/pdfs/<%= pdf._id %>/download" download="<%= pdf.filename %>"
+            >Download</a
+          >
+        </li>
+        <% }) %>
+      </ul>
+      <% } else { %>
+      <p>No PDFs generated yet.</p>
+      <% } %>
+    </div>
+    <script src="/js/main.js"></script>
+  </body>
+</html>
