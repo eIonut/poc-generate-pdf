@@ -15,7 +15,7 @@
       <% } %>
 
       <h2>Generate New PDF</h2>
-      <form action="/generate-pdf" method="POST">
+      <form id="pdfGenerateForm" action="/generate-pdf" method="POST">
         <label for="title">Document Title:</label>
         <input
           type="text"
@@ -39,7 +39,10 @@ This is the main content of the PDF. It can span multiple lines and will be form
           required
         />
 
-        <button type="submit">Generate PDF</button>
+        <button type="submit">Generate and Save PDF</button>
+        <button type="button" id="previewPdfButton" style="margin-left: 10px">
+          Preview PDF
+        </button>
       </form>
 
       <h2>Generated PDFs</h2>
