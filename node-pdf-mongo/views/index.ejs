@@ -124,6 +124,22 @@
         </div>
       </form>
 
+      <div
+        id="previewContainer"
+        style="display: none; margin-top: 20px; border: 1px solid #ccc"
+      >
+        <h3>
+          Invoice Preview
+          <button type="button" id="closePreviewButton" style="float: right">
+            Close
+          </button>
+        </h3>
+        <iframe
+          id="previewIframe"
+          style="width: 100%; height: 500px; border: none"
+        ></iframe>
+      </div>
+
       <h2>Generated Invoices</h2>
       <% if (pdfs && pdfs.length > 0) { %>
       <ul>

@@ -9,6 +9,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const taxPercentageInput = document.getElementById("taxPercentage");
   const grandTotalInput = document.getElementById("grandTotal");
 
+  // For iframe preview
+  const previewContainer = document.getElementById("previewContainer");
+  const previewIframe = document.getElementById("previewIframe");
+  const closePreviewButton = document.getElementById("closePreviewButton");
+  let currentPdfUrl = null; // To store the blob URL for revoking
+
   let serviceRowCount = 0;
 
   function addServiceRow() {
@@ -117,18 +123,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
       try {
         const response = await fetch("/preview-invoice", {
-          // Renamed from /preview-pdf
           method: "POST",
           headers: {
-            "Content-Type": "application/json", // Sending JSON data now
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
         });
 
         if (response.ok) {
           const pdfBlob = await response.blob();
-          const pdfUrl = URL.createObjectURL(pdfBlob);
-          window.open(pdfUrl, "_blank");
+
+          // Revoke previous blob URL if it exists
+          if (currentPdfUrl) {
+            URL.revokeObjectURL(currentPdfUrl);
+          }
+          currentPdfUrl = URL.createObjectURL(pdfBlob);
+
+          previewIframe.src = currentPdfUrl;
+          previewContainer.style.display = "block"; // Show the preview container
         } else {
           const errorText = await response.text();
           console.error(
@@ -145,6 +157,18 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (error) {
         console.error("Error previewing invoice:", error);
         alert("Error previewing invoice. See console for details.");
+      }
+    });
+  }
+
+  // Handle Close Preview button click
+  if (closePreviewButton && previewContainer && previewIframe) {
+    closePreviewButton.addEventListener("click", () => {
+      previewContainer.style.display = "none";
+      previewIframe.src = "about:blank"; // Clear the iframe
+      if (currentPdfUrl) {
+        URL.revokeObjectURL(currentPdfUrl);
+        currentPdfUrl = null;
       }
     });
   }
