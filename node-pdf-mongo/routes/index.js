@@ -1,7 +1,7 @@
 const express = require("express");
 const { ObjectId } = require("mongodb");
 const { getDB } = require("../config/db");
-const { generatePdfBuffer } = require("../services/pdfService");
+const { generateInvoicePdfBuffer } = require("../services/pdfService");
 
 const router = express.Router();
 let appMessage = null; // This might be better handled with flash messages or similar session-based approaches
@@ -27,38 +27,70 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/generate-pdf", async (req, res) => {
+router.post("/generate-invoice", async (req, res) => {
   const db = getDB();
   if (!db)
     return res
       .status(503)
       .send("Database not connected. Please try again later.");
 
-  const { title, content, qrData } = req.body;
+  // Backend needs to parse servicesData (JSON string) and other calculated fields
+  const {
+    clientCompanyName,
+    clientContactPerson,
+    clientEmail,
+    clientBillingAddress,
+    invoiceNumber,
+    invoiceDate,
+    dueDate,
+    additionalNotes,
+  } = req.body;
+
+  const services = JSON.parse(req.body.servicesData || "[]");
+  const subtotal = parseFloat(req.body.calculatedSubtotal) || 0;
+  const taxPercentage = parseFloat(req.body.calculatedTaxPercentage) || 0;
+  const grandTotal = parseFloat(req.body.calculatedGrandTotal) || 0;
+
+  const invoiceData = {
+    clientCompanyName,
+    clientContactPerson,
+    clientEmail,
+    clientBillingAddress,
+    invoiceNumber,
+    invoiceDate,
+    dueDate,
+    services, // This is now an array of objects
+    subtotal,
+    taxPercentage,
+    grandTotal,
+    additionalNotes,
+  };
 
   try {
-    const pdfBuffer = await generatePdfBuffer({ title, content, qrData });
-    const filename = `${(title || "document")
-      .replace(/[^\w\s-]/gi, "")
-      .replace(/\s+/g, "_")}_${Date.now()}.pdf`;
+    const pdfBuffer = await generateInvoicePdfBuffer(invoiceData); // Renamed function
+    const filename = `Invoice_${invoiceNumber || "INV"}_${Date.now()}.pdf`;
 
+    // Consider renaming collection to 'invoices' and adjusting schema
     await db.collection("pdfs").insertOne({
       filename: filename,
       contentType: "application/pdf",
-      data: pdfBuffer,
+      // Storing full invoiceData might be useful for re-generation or records
+      invoiceData: invoiceData, // Store the structured invoice data
+      data: pdfBuffer, // The generated PDF buffer
       createdAt: new Date(),
+      invoiceNumber: invoiceNumber, // For easier querying if needed
     });
-    console.log(`PDF "${filename}" generated and stored in MongoDB.`);
+    console.log(`Invoice "${filename}" generated and stored in MongoDB.`);
     appMessage = {
       type: "success",
-      text: `PDF "${filename}" generated successfully!`,
+      text: `Invoice "${filename}" generated successfully!`,
     };
     res.redirect("/");
   } catch (error) {
-    console.error("Error in /generate-pdf route:", error);
+    console.error("Error in /generate-invoice route:", error);
     appMessage = {
       type: "error",
-      text: "Failed to generate PDF. Check server logs for details.",
+      text: "Failed to generate invoice. Check server logs for details.",
     };
     if (!res.headersSent) {
       res.redirect("/");
@@ -66,26 +98,28 @@ router.post("/generate-pdf", async (req, res) => {
   }
 });
 
-router.post("/preview-pdf", async (req, res) => {
-  const { title, content, qrData } = req.body;
+router.post("/preview-invoice", async (req, res) => {
+  // This route now expects a JSON payload directly from client-side fetch
+  const invoiceData = req.body;
   try {
-    const pdfBuffer = await generatePdfBuffer({ title, content, qrData });
-    const filename = `${(title || "document")
-      .replace(/[^\w\s-]/gi, "")
-      .replace(/\s+/g, "_")}_${Date.now()}.pdf`;
+    const pdfBuffer = await generateInvoicePdfBuffer(invoiceData); // Renamed function
+    const filename = `Preview_Invoice_${
+      invoiceData.invoiceNumber || "INV"
+    }_${Date.now()}.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
     res.send(pdfBuffer);
   } catch (error) {
-    console.error("Error in /preview-pdf route:", error);
+    console.error("Error in /preview-invoice route:", error);
     if (!res.headersSent) {
-      res.status(500).send("Failed to generate PDF for preview.");
+      res.status(500).send("Failed to generate invoice for preview.");
     }
   }
 });
 
-router.get("/pdfs/:id/download", async (req, res) => {
+router.get("/invoices/:id/download", async (req, res) => {
+  // Renamed route
   const db = getDB();
   if (!db)
     return res

@@ -1,7 +1,8 @@
 const PdfPrinter = require("pdfmake");
 const fs = require("fs");
 const path = require("path");
-const QRCode = require("qrcode");
+// QRCode is not used in invoice, can be removed if not needed elsewhere.
+// const QRCode = require("qrcode");
 
 // --- PDF Font Setup ---
 const fonts = {
@@ -47,161 +48,288 @@ async function getLogoBase64() {
   return null;
 }
 
-// --- PDF Generation Function ---
-async function generatePdfBuffer(data) {
-  const { title, content, qrData } = data;
+// --- Invoice PDF Generation Function ---
+async function generateInvoicePdfBuffer(invoiceData) {
+  const {
+    clientCompanyName,
+    clientContactPerson,
+    clientEmail,
+    clientBillingAddress,
+    invoiceNumber,
+    invoiceDate,
+    dueDate,
+    services, // Array of service objects
+    subtotal,
+    taxPercentage,
+    grandTotal,
+    additionalNotes,
+  } = invoiceData;
 
-  const qrCodeImage = await QRCode.toDataURL(qrData || "https://nodejs.org/");
-  // const logoBase64 = await getLogoBase64(); // If you have a dynamic logo
+  // const logoBase64 = await getLogoBase64(); // Load your actual logo if you have one
   const logoBase64 =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="; // Placeholder
 
+  const servicesTableBody = [
+    [
+      { text: "Description", style: "tableHeader" },
+      { text: "Service Date", style: "tableHeader" },
+      { text: "Qty", style: "tableHeader", alignment: "right" },
+      { text: "Unit Price", style: "tableHeader", alignment: "right" },
+      { text: "Line Total", style: "tableHeader", alignment: "right" },
+    ],
+  ];
+
+  services.forEach((service) => {
+    servicesTableBody.push([
+      service.description || "",
+      service.date ? new Date(service.date).toLocaleDateString() : "",
+      {
+        text: service.qty !== undefined ? service.qty.toString() : "0",
+        alignment: "right",
+      },
+      {
+        text:
+          service.unitPrice !== undefined
+            ? parseFloat(service.unitPrice).toFixed(2)
+            : "0.00",
+        alignment: "right",
+      },
+      {
+        text:
+          service.lineTotal !== undefined
+            ? parseFloat(service.lineTotal).toFixed(2)
+            : "0.00",
+        alignment: "right",
+      },
+    ]);
+  });
+
   const documentDefinition = {
     info: {
-      title: title || "Generated PDF",
-      author: "My NodeJS App",
+      title: `Invoice ${invoiceNumber || "N/A"}`,
+      author: "My Invoicing App", // Replace with your app name
     },
-    header: function (currentPage, pageCount, pageSize) {
-      const headerColumns = [];
-      if (logoBase64) {
-        headerColumns.push({
-          image: logoBase64,
-          width: 50,
-          margin: [20, 10, 0, 0],
-        });
-      } else {
-        headerColumns.push({ text: "", width: 50, margin: [20, 10, 0, 0] });
-      }
-      headerColumns.push({
-        text: title || "Document",
-        alignment: "center",
-        fontSize: 16,
-        margin: [0, 20, 0, 0],
-      });
-      headerColumns.push({ text: "", fit: [100, 100] });
-      return [
+    pageMargins: [40, 60, 40, 60], // [left, top, right, bottom]
+    header: {
+      columns: [
+        logoBase64
+          ? { image: logoBase64, width: 50, margin: [0, 0, 20, 0] }
+          : { text: "Your Company", style: "header", margin: [0, 0, 20, 0] },
         {
-          columns: headerColumns,
+          text: "INVOICE",
+          style: "invoiceTitle",
+          alignment: "right",
         },
-        {
-          canvas: [
-            {
-              type: "line",
-              x1: 20,
-              y1: 5,
-              x2: pageSize.width - 20,
-              y2: 5,
-              lineWidth: 0.5,
-            },
-          ],
-          margin: [0, 0, 0, 10],
-        },
-      ];
-    },
-    footer: function (currentPage, pageCount) {
-      return {
-        columns: [
-          {
-            text: `Generated: ${new Date().toLocaleDateString()}`,
-            alignment: "left",
-            margin: [40, 10, 0, 0],
-          },
-          {
-            text: `Page ${currentPage.toString()} of ${pageCount}`,
-            alignment: "right",
-            margin: [0, 10, 40, 0],
-          },
-        ],
-        style: "footerText",
-      };
+      ],
+      margin: [40, 30, 40, 10], // Adjust header margin
     },
     content: [
+      // Client Information and Invoice Details
       {
-        text: title || "Sample PDF Document",
-        style: "header",
-        alignment: "center",
-        margin: [0, 10, 0, 20],
+        columns: [
+          {
+            width: "*",
+            text: [
+              { text: "Bill To:\n", style: "subheader" },
+              `${clientCompanyName || "N/A"}\n`,
+              clientContactPerson ? `${clientContactPerson}\n` : "",
+              clientEmail ? `${clientEmail}\n` : "",
+              `${clientBillingAddress || "N/A"}`,
+            ],
+          },
+          {
+            width: "auto",
+            text: [
+              {
+                text: `Invoice #: ${invoiceNumber || "N/A"}\n`,
+                style: "subheaderRight",
+              },
+              {
+                text: `Date: ${
+                  invoiceDate
+                    ? new Date(invoiceDate).toLocaleDateString()
+                    : "N/A"
+                }\n`,
+                style: "textRight",
+              },
+              {
+                text: `Due Date: ${
+                  dueDate ? new Date(dueDate).toLocaleDateString() : "N/A"
+                }\n`,
+                style: "textRight",
+              },
+            ],
+            alignment: "right",
+          },
+        ],
+        margin: [0, 20, 0, 30], // Margin below this section
       },
+
+      // Services Table
       {
-        text: content || "This is some sample content for the PDF.",
-        margin: [0, 0, 0, 20],
-      },
-      {
-        text: "Complex Table Example",
+        text: "Services / Items",
         style: "subheader",
-        margin: [0, 10, 0, 10],
+        margin: [0, 0, 0, 5], // Margin below subheader
       },
       {
         table: {
           headerRows: 1,
-          widths: ["*", "auto", 100, "*"],
-          body: [
-            [
-              { text: "First Header", style: "tableHeader" },
-              { text: "Second Header", style: "tableHeader" },
-              { text: "Third Header", style: "tableHeader" },
-              { text: "Fourth Header", style: "tableHeader" },
-            ],
-            [
-              "Sample value 1",
-              "Sample value 2",
-              "Sample value 3",
-              "Sample value 4",
-            ],
-            [{ text: "Bold value", bold: true }, "Val 2", "Val 3", "Val 4"],
-            [
-              "Value 1",
-              "Value 2",
-              "Value 3",
-              { text: "Different style", italics: true, color: "blue" },
-            ],
-            [
-              {
-                text: "Multi-row\nCell",
-                rowSpan: 2,
-                alignment: "center",
-                margin: [0, 15, 0, 0],
-              },
-              "Data A1",
-              "Data B1",
-              "Data C1",
-            ],
-            ["", "Data A2", "Data B2", "Data C2"],
-          ],
+          widths: ["*", "auto", "auto", "auto", "auto"],
+          body: servicesTableBody,
         },
-        layout: "lightHorizontalLines",
+        layout: "lightHorizontalLines", // or 'headerLineOnly', 'noBorders' etc.
+        margin: [0, 0, 0, 30], // Margin below table
       },
-      { text: "QR Code:", style: "subheader", margin: [0, 20, 0, 5] },
-      { image: qrCodeImage, width: 150, alignment: "center" },
+
+      // Totals Section
       {
-        text: "Second Page Content Example",
-        pageBreak: "before",
-        style: "subheader",
-        margin: [0, 20, 0, 10],
-      },
-      {
-        text: "This content is on a new page to demonstrate multi-page layout.",
-      },
-      {
-        ul: [
-          "Item 1 on the new page.",
-          "Item 2, perhaps with some detail.",
+        columns: [
+          { width: "*", text: "" }, // Spacer
           {
-            text: "Item 3 with sub-items",
-            ul: ["Sub-item A", "Sub-item B: further explanation here."],
+            width: "auto",
+            table: {
+              body: [
+                [
+                  {
+                    text: "Subtotal:",
+                    style: "totalsLabel",
+                    alignment: "right",
+                  },
+                  {
+                    text: ` ${
+                      subtotal !== undefined
+                        ? parseFloat(subtotal).toFixed(2)
+                        : "0.00"
+                    }`,
+                    style: "totalsValue",
+                    alignment: "right",
+                  },
+                ],
+                [
+                  {
+                    text: "Tax (%):",
+                    style: "totalsLabel",
+                    alignment: "right",
+                  },
+                  {
+                    text: ` ${
+                      taxPercentage !== undefined
+                        ? parseFloat(taxPercentage).toFixed(2)
+                        : "0.00"
+                    }`,
+                    style: "totalsValue",
+                    alignment: "right",
+                  },
+                ],
+                [
+                  {
+                    text: "Grand Total:",
+                    style: "totalsLabelBold",
+                    alignment: "right",
+                  },
+                  {
+                    text: ` ${
+                      grandTotal !== undefined
+                        ? parseFloat(grandTotal).toFixed(2)
+                        : "0.00"
+                    }`,
+                    style: "totalsValueBold",
+                    alignment: "right",
+                  },
+                ],
+              ],
+            },
+            layout: "noBorders",
           },
-          "Item 4, the final one for this list example.",
         ],
-        margin: [0, 0, 0, 20],
+        margin: [0, 0, 0, 30], // Margin after totals
       },
+
+      // Additional Notes
+      additionalNotes
+        ? {
+            text: "Additional Notes",
+            style: "subheader",
+            margin: [0, 10, 0, 5],
+          }
+        : {},
+      additionalNotes
+        ? {
+            text: additionalNotes,
+            style: "notesText",
+            margin: [0, 0, 0, 30],
+          }
+        : {},
     ],
-    styles: {
-      header: { fontSize: 22, bold: true },
-      subheader: { fontSize: 16, bold: true },
-      tableHeader: { bold: true, fontSize: 13, color: "black" },
-      footerText: { fontSize: 8 },
+    footer: function (currentPage, pageCount) {
+      return {
+        text: `Page ${currentPage.toString()} of ${pageCount}`,
+        alignment: "center",
+        style: "footer",
+      };
     },
-    defaultStyle: { font: "Roboto" },
+    styles: {
+      header: {
+        fontSize: 20,
+        bold: true,
+        margin: [0, 0, 0, 10], // [left, top, right, bottom]
+      },
+      invoiceTitle: {
+        fontSize: 28,
+        bold: true,
+      },
+      subheader: {
+        fontSize: 14,
+        bold: true,
+        margin: [0, 10, 0, 5],
+      },
+      subheaderRight: {
+        fontSize: 12,
+        bold: true,
+        margin: [0, 0, 0, 2],
+      },
+      textRight: {
+        fontSize: 10,
+        margin: [0, 0, 0, 2],
+      },
+      tableHeader: {
+        bold: true,
+        fontSize: 10,
+        color: "black",
+      },
+      totalsLabel: {
+        bold: false,
+        fontSize: 10,
+        margin: [0, 2, 5, 2], // Add some margin to right of label
+      },
+      totalsValue: {
+        bold: false,
+        fontSize: 10,
+        margin: [0, 2, 0, 2],
+      },
+      totalsLabelBold: {
+        bold: true,
+        fontSize: 11,
+        margin: [0, 5, 5, 5],
+      },
+      totalsValueBold: {
+        bold: true,
+        fontSize: 11,
+        margin: [0, 5, 0, 5],
+      },
+      notesText: {
+        fontSize: 9,
+        italics: true,
+      },
+      footer: {
+        fontSize: 8,
+        margin: [0, 10, 0, 0],
+      },
+    },
+    defaultStyle: {
+      font: "Roboto",
+      fontSize: 10,
+    },
   };
 
   return new Promise((resolve, reject) => {
@@ -214,4 +342,4 @@ async function generatePdfBuffer(data) {
   });
 }
 
-module.exports = { generatePdfBuffer };
+module.exports = { generateInvoicePdfBuffer };
